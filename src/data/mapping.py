@@ -85,6 +85,21 @@ INTENT_TO_ROUTE = {
     "why_verify_identity": "account_currency_and_access",
 }
 
+# AI
+
+ROUTE_TO_ID = {
+    "account_currency_and_access": 0,
+    "card_services": 1,
+    "payments_and_disputes": 2,
+    "transfers_and_topups": 3,
+}
+# AI
+
+ID_TO_ROUTE = {
+    route_id: route
+    for route, route_id in ROUTE_TO_ID.items()
+}
+
 
 def get_route(intent: str) -> str:
     """Return the agent route for a intent."""
