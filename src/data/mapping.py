@@ -92,6 +92,7 @@ ROUTE_TO_ID = {
     "card_services": 1,
     "payments_and_disputes": 2,
     "transfers_and_topups": 3,
+    "general_agent": 4
 }
 # AI
 

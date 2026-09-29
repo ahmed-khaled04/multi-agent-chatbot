@@ -1,4 +1,5 @@
 import pandas as pd
+import json
 
 """
 
@@ -9,6 +10,15 @@ Exploring the dataset.
 train_df = pd.read_csv("data/raw/train.csv")
 test_df = pd.read_csv("data/raw/test.csv")
 
+with open("data/raw/clinc150/data_oos_plus.json" , encoding="utf-8") as f:
+    clinc_data = json.load(f)
+
+print("CLINC150")
+print(len(clinc_data["oos_train"]))
+print(len(clinc_data["oos_val"]))
+print(len(clinc_data["oos_test"]))
+
+print("Banking77")
 print("Training shape:", train_df.shape)
 print("Test shape:", test_df.shape)
 

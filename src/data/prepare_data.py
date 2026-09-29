@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+import json
 from sklearn.model_selection import train_test_split
 
 from .mapping import INTENT_TO_ROUTE
@@ -9,6 +10,15 @@ RAW_DATA_DIR = Path("data/raw")
 PROCESSED_DATA_DIR = Path("data/processed")
 RANDOM_SEED = 42
 VALIDATION_SIZE = 0.15
+
+def create_oos_dataframe(examples: list[list[str]]) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "text": [example[0] for example in examples],
+            "category": "out_of_scope",
+            "agent_route": "general_agent"
+        }
+    )
 
 def add_agent_route(dataframe: pd.DataFrame) -> pd.DataFrame:
     dataframe = dataframe.copy()
@@ -33,6 +43,17 @@ def main() -> None:
     train_df = add_agent_route(train_df)
     test_df = add_agent_route(test_df)
 
+    # Add the CLINC150 OOS to Banking77
+    with open(
+        RAW_DATA_DIR / "clinc150" / "data_oos_plus.json",
+        encoding="utf-8"
+    ) as f:
+        clinc_data = json.load(f)
+    oos_train_df = create_oos_dataframe(clinc_data["oos_train"])
+    oos_validation_df = create_oos_dataframe(clinc_data["oos_val"])
+    oos_test_df = create_oos_dataframe(clinc_data["oos_test"])
+
+
     # Split Train into train and validation
     development_train_df , validation_df = train_test_split(
         train_df,
@@ -40,6 +61,21 @@ def main() -> None:
         random_state=RANDOM_SEED,
         stratify=train_df["category"],
     )
+
+    development_train_df = pd.concat(
+        [development_train_df , oos_train_df],
+        ignore_index=True,
+    ).sample(frac=1 , random_state=RANDOM_SEED)
+
+    validation_df = pd.concat(
+        [validation_df , oos_validation_df],
+        ignore_index=True,
+    ).sample(frac=1, random_state=RANDOM_SEED)
+
+    test_df = pd.concat(
+        [test_df, oos_test_df],
+        ignore_index=True,
+    ).sample(frac=1 ,  random_state=RANDOM_SEED)
 
     PROCESSED_DATA_DIR.mkdir(parents=True , exist_ok=True)
 
