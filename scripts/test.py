@@ -23,7 +23,7 @@ RANDOM_SEED = 42
 
 
 checkpoint = torch.load(
-    CHECKPOINT_DIR / "best_model_64.pt",
+    CHECKPOINT_DIR / "best_model_oos.pt",
     weights_only=True
 )
 

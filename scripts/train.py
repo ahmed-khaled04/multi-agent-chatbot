@@ -23,7 +23,7 @@ CHECKPOINT_DIR.mkdir(parents=True , exist_ok=True)
 
 # Hyperparameters
 SEQUENCE_LENGTH = 48
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 NUM_WORKERS = 0
 EMBED_DIM = 256
 HIDDEN_DIM = 64    
@@ -190,7 +190,7 @@ for epoch in tqdm(range(EPOCHS)):
                 "num_classes": len(ROUTE_TO_ID),
                 "n_layers": N_LAYERS,
             },
-        } , CHECKPOINT_DIR / "best_model_oos.pt")
+        } , CHECKPOINT_DIR / "best_model_oos_64_256.pt")
         print("Best Model Saved")
     else:
         epochs_without_improvement += 1
@@ -246,7 +246,7 @@ for epoch in tqdm(range(EPOCHS)):
 
 # AI
 checkpoint = torch.load(
-    CHECKPOINT_DIR / "best_model_oos.pt"
+    CHECKPOINT_DIR / "best_model_oos_64_256.pt"
 )
 
 
@@ -295,7 +295,7 @@ ax.set_title("Validation Confusion Matrix")
 PLOTS_DIR = Path("plots")
 PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
-plot_path = PLOTS_DIR / "validation_confusion_matrix.png"
+plot_path = PLOTS_DIR / "validation_confusion_matrix_64_256.png"
 
 fig.savefig(
     plot_path,
