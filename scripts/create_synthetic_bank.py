@@ -11,20 +11,100 @@ DATABASE_PATH = PROJECT_ROOT / "data" / "synthetic" / "bank.db"
 
 
 CUSTOMERS = [
-    ("cus_001", "Ahmed Hassan", "ahmed.hassan@example.com", "Egypt"),
-    ("cus_002", "Sara Ibrahim", "sara.ibrahim@example.com", "Egypt"),
-    ("cus_003", "Omar Khaled", "omar.khaled@example.com", "Egypt"),
-    ("cus_004", "Layla Nasser", "layla.nasser@example.com", "Jordan"),
-    ("cus_005", "Youssef Ali", "youssef.ali@example.com", "Egypt"),
+    (
+        "cus_001", "Ahmed Hassan", "ahmed.hassan@example.com", "Egypt",
+        "+201001234568", "en", "verified", "2026-09-15T10:30:00Z",
+    ),
+    (
+        "cus_002", "Sara Ibrahim", "sara.ibrahim@example.com", "Egypt",
+        "+201112345678", "ar", "verified", None,
+    ),
+    (
+        "cus_003", "Omar Khaled", "omar.khaled@example.com", "Egypt",
+        "+201223456789", "en", "pending", "2026-09-29T12:00:00Z",
+    ),
+    (
+        "cus_004", "Layla Nasser", "layla.nasser@example.com", "Jordan",
+        "+962790123456", "ar", "verified", "2026-08-21T08:15:00Z",
+    ),
+    (
+        "cus_005", "Youssef Ali", "youssef.ali@example.com", "Egypt",
+        "+201334567890", "en", "failed", "2026-09-30T17:45:00Z",
+    ),
 ]
 
 
 ACCOUNTS = [
-    ("acc_001", "cus_001", "checking", "EGP", 250_000, "active"),
-    ("acc_002", "cus_002", "checking", "EGP", 82_500, "active"),
-    ("acc_003", "cus_003", "savings", "USD", 125_000, "frozen"),
-    ("acc_004", "cus_004", "checking", "JOD", 73_500, "active"),
-    ("acc_005", "cus_005", "savings", "EGP", 1_040_000, "active"),
+    (
+        "acc_001", "cus_001", "4821", "checking", "EGP", 250_000,
+        40_250, "active", "2025-01-10T09:00:00Z", None,
+    ),
+    (
+        "acc_002", "cus_002", "7319", "checking", "EGP", 82_500,
+        82_500, "active", "2025-03-18T11:30:00Z", None,
+    ),
+    (
+        "acc_003", "cus_003", "2056", "savings", "USD", 125_000,
+        0, "frozen", "2025-06-02T13:15:00Z", None,
+    ),
+    (
+        "acc_004", "cus_004", "8840", "checking", "JOD", 73_500,
+        73_500, "active", "2024-11-22T10:45:00Z", None,
+    ),
+    (
+        "acc_005", "cus_005", "6194", "savings", "EGP", 1_040_000,
+        965_000, "active", "2025-08-14T07:30:00Z", None,
+    ),
+]
+
+
+SUPPORTED_CURRENCIES = [
+    ("EGP", "Egyptian Pound", "E£", 2, 1, 1, 1),
+    ("USD", "US Dollar", "$", 2, 1, 1, 1),
+    ("JOD", "Jordanian Dinar", "JD", 3, 1, 1, 1),
+    ("EUR", "Euro", "€", 2, 1, 1, 1),
+    ("GBP", "British Pound", "£", 2, 1, 1, 1),
+]
+
+
+EXCHANGE_RATES = [
+    ("USD", "EGP", 48.50, "2026-10-02T00:00:00Z", "2026-10-03T00:00:00Z"),
+    ("EGP", "USD", 0.02061856, "2026-10-02T00:00:00Z", "2026-10-03T00:00:00Z"),
+    ("USD", "JOD", 0.709, "2026-10-02T00:00:00Z", "2026-10-03T00:00:00Z"),
+    ("JOD", "USD", 1.410437, "2026-10-02T00:00:00Z", "2026-10-03T00:00:00Z"),
+    ("EUR", "USD", 1.17, "2026-10-02T00:00:00Z", "2026-10-03T00:00:00Z"),
+    ("USD", "EUR", 0.854701, "2026-10-02T00:00:00Z", "2026-10-03T00:00:00Z"),
+    ("GBP", "USD", 1.35, "2026-10-02T00:00:00Z", "2026-10-03T00:00:00Z"),
+    ("USD", "GBP", 0.740741, "2026-10-02T00:00:00Z", "2026-10-03T00:00:00Z"),
+]
+
+
+PROFILE_UPDATES = [
+    (
+        "pru_001", "cus_001", "phone_number", "+201001234567",
+        "+201001234568", "applied", "2026-09-15T10:00:00Z",
+        "2026-09-15T10:30:00Z",
+    ),
+    (
+        "pru_002", "cus_002", "email", "sara.ibrahim@example.com",
+        "sara.new@example.com", "requested", "2026-10-01T14:20:00Z", None,
+    ),
+    (
+        "pru_003", "cus_004", "preferred_language", "en", "ar", "applied",
+        "2026-08-21T08:00:00Z", "2026-08-21T08:15:00Z",
+    ),
+]
+
+
+ACCOUNT_CLOSURE_REQUESTS = [
+    (
+        "acr_001", "acc_005", "Customer is consolidating accounts",
+        "under_review", "2026-10-01T09:30:00Z", None,
+    ),
+    (
+        "acr_002", "acc_002", "Customer changed their mind", "cancelled",
+        "2026-09-12T12:00:00Z", "2026-09-12T12:20:00Z",
+    ),
 ]
 
 
@@ -275,12 +355,25 @@ TOPUPS = [
 
 
 CUSTOMER_UPSERT = """
-INSERT INTO customers (customer_id, full_name, email, country)
-VALUES (?, ?, ?, ?)
+INSERT INTO customers (
+    customer_id,
+    full_name,
+    email,
+    country,
+    phone_number,
+    preferred_language,
+    identity_verification_status,
+    updated_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(customer_id) DO UPDATE SET
     full_name = excluded.full_name,
     email = excluded.email,
-    country = excluded.country
+    country = excluded.country,
+    phone_number = excluded.phone_number,
+    preferred_language = excluded.preferred_language,
+    identity_verification_status = excluded.identity_verification_status,
+    updated_at = excluded.updated_at
 """
 
 
@@ -288,18 +381,104 @@ ACCOUNT_UPSERT = """
 INSERT INTO accounts (
     account_id,
     customer_id,
+    account_number_last_four,
     account_type,
     currency,
     balance_minor_units,
-    status
+    available_balance_minor_units,
+    status,
+    opened_at,
+    closed_at
 )
-VALUES (?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(account_id) DO UPDATE SET
     customer_id = excluded.customer_id,
+    account_number_last_four = excluded.account_number_last_four,
     account_type = excluded.account_type,
     currency = excluded.currency,
     balance_minor_units = excluded.balance_minor_units,
-    status = excluded.status
+    available_balance_minor_units = excluded.available_balance_minor_units,
+    status = excluded.status,
+    opened_at = excluded.opened_at,
+    closed_at = excluded.closed_at
+"""
+
+
+SUPPORTED_CURRENCY_UPSERT = """
+INSERT INTO supported_currencies (
+    currency_code,
+    display_name,
+    symbol,
+    decimal_places,
+    can_hold,
+    can_exchange,
+    enabled
+)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(currency_code) DO UPDATE SET
+    display_name = excluded.display_name,
+    symbol = excluded.symbol,
+    decimal_places = excluded.decimal_places,
+    can_hold = excluded.can_hold,
+    can_exchange = excluded.can_exchange,
+    enabled = excluded.enabled
+"""
+
+
+EXCHANGE_RATE_UPSERT = """
+INSERT INTO exchange_rates (
+    base_currency,
+    quote_currency,
+    rate,
+    effective_at,
+    expires_at
+)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(base_currency, quote_currency, effective_at) DO UPDATE SET
+    rate = excluded.rate,
+    expires_at = excluded.expires_at
+"""
+
+
+PROFILE_UPDATE_UPSERT = """
+INSERT INTO customer_profile_updates (
+    profile_update_id,
+    customer_id,
+    field_name,
+    old_value,
+    new_value,
+    status,
+    requested_at,
+    completed_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(profile_update_id) DO UPDATE SET
+    customer_id = excluded.customer_id,
+    field_name = excluded.field_name,
+    old_value = excluded.old_value,
+    new_value = excluded.new_value,
+    status = excluded.status,
+    requested_at = excluded.requested_at,
+    completed_at = excluded.completed_at
+"""
+
+
+ACCOUNT_CLOSURE_REQUEST_UPSERT = """
+INSERT INTO account_closure_requests (
+    closure_request_id,
+    account_id,
+    reason,
+    status,
+    requested_at,
+    resolved_at
+)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT(closure_request_id) DO UPDATE SET
+    account_id = excluded.account_id,
+    reason = excluded.reason,
+    status = excluded.status,
+    requested_at = excluded.requested_at,
+    resolved_at = excluded.resolved_at
 """
 
 
@@ -498,8 +677,18 @@ def seed_database(database_path: Path = DATABASE_PATH) -> None:
     try:
         create_schema(connection)
         with connection:
+            connection.executemany(
+                SUPPORTED_CURRENCY_UPSERT,
+                SUPPORTED_CURRENCIES,
+            )
+            connection.executemany(EXCHANGE_RATE_UPSERT, EXCHANGE_RATES)
             connection.executemany(CUSTOMER_UPSERT, CUSTOMERS)
             connection.executemany(ACCOUNT_UPSERT, ACCOUNTS)
+            connection.executemany(PROFILE_UPDATE_UPSERT, PROFILE_UPDATES)
+            connection.executemany(
+                ACCOUNT_CLOSURE_REQUEST_UPSERT,
+                ACCOUNT_CLOSURE_REQUESTS,
+            )
             connection.executemany(CARD_UPSERT, CARDS)
             connection.executemany(TRANSACTION_UPSERT, TRANSACTIONS)
             connection.executemany(REFUND_UPSERT, REFUNDS)
@@ -519,7 +708,11 @@ def main() -> None:
         f"{len(ACCOUNTS)} accounts, {len(CARDS)} cards, "
         f"{len(TRANSACTIONS)} transactions, {len(REFUNDS)} refunds, "
         f"{len(DISPUTES)} disputes, {len(BENEFICIARIES)} beneficiaries, "
-        f"{len(TRANSFERS)} transfers, and {len(TOPUPS)} top-ups."
+        f"{len(TRANSFERS)} transfers, {len(TOPUPS)} top-ups, "
+        f"{len(SUPPORTED_CURRENCIES)} supported currencies, "
+        f"{len(EXCHANGE_RATES)} exchange rates, "
+        f"{len(PROFILE_UPDATES)} profile updates, and "
+        f"{len(ACCOUNT_CLOSURE_REQUESTS)} account closure requests."
     )
 
 

@@ -10,6 +10,21 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATABASE_PATH = PROJECT_ROOT / "data" / "synthetic" / "bank.db"
 
 
+ACCOUNT_SELECT = """
+SELECT
+    accounts.account_id,
+    accounts.account_number_last_four,
+    accounts.account_type,
+    accounts.currency,
+    accounts.balance_minor_units,
+    accounts.available_balance_minor_units,
+    accounts.status,
+    accounts.opened_at,
+    accounts.closed_at
+FROM accounts
+"""
+
+
 CARD_SELECT = """
 SELECT
     cards.card_id,
@@ -131,6 +146,351 @@ def connect_database(
     if read_only:
         connection.execute("PRAGMA query_only = ON")
     return connection
+
+
+def list_customer_accounts(
+    customer_id: str,
+    database_path: str | Path = DEFAULT_DATABASE_PATH,
+) -> list[dict[str, object]]:
+    """Return every account belonging to the specified customer."""
+    _validate_identifier(customer_id, "customer_id")
+
+    connection = connect_database(database_path)
+    try:
+        rows = connection.execute(
+            ACCOUNT_SELECT
+            + """
+            WHERE accounts.customer_id = ?
+            ORDER BY accounts.opened_at, accounts.account_id
+            """,
+            (customer_id,),
+        ).fetchall()
+    finally:
+        connection.close()
+
+    return [_account_row_to_dict(row) for row in rows]
+
+
+def get_account_details(
+    customer_id: str,
+    account_id: str,
+    database_path: str | Path = DEFAULT_DATABASE_PATH,
+) -> dict[str, object] | None:
+    """Return an account only when it belongs to the specified customer."""
+    _validate_identifier(customer_id, "customer_id")
+    _validate_identifier(account_id, "account_id")
+
+    connection = connect_database(database_path)
+    try:
+        row = connection.execute(
+            ACCOUNT_SELECT
+            + """
+            WHERE accounts.customer_id = ? AND accounts.account_id = ?
+            """,
+            (customer_id, account_id),
+        ).fetchone()
+    finally:
+        connection.close()
+
+    return _account_row_to_dict(row) if row is not None else None
+
+
+def get_account_balance(
+    customer_id: str,
+    account_id: str,
+    database_path: str | Path = DEFAULT_DATABASE_PATH,
+) -> dict[str, object] | None:
+    """Return current and available balances for a customer-owned account."""
+    _validate_identifier(customer_id, "customer_id")
+    _validate_identifier(account_id, "account_id")
+
+    connection = connect_database(database_path)
+    try:
+        row = connection.execute(
+            """
+            SELECT
+                accounts.account_id,
+                accounts.account_number_last_four,
+                accounts.currency,
+                accounts.balance_minor_units,
+                accounts.available_balance_minor_units,
+                accounts.status
+            FROM accounts
+            WHERE accounts.customer_id = ? AND accounts.account_id = ?
+            """,
+            (customer_id, account_id),
+        ).fetchone()
+    finally:
+        connection.close()
+
+    return _account_row_to_dict(row) if row is not None else None
+
+
+def list_supported_currencies(
+    database_path: str | Path = DEFAULT_DATABASE_PATH,
+) -> list[dict[str, object]]:
+    """Return enabled currencies and their supported bank operations."""
+    connection = connect_database(database_path)
+    try:
+        rows = connection.execute(
+            """
+            SELECT
+                currency_code,
+                display_name,
+                symbol,
+                decimal_places,
+                can_hold,
+                can_exchange
+            FROM supported_currencies
+            WHERE enabled = 1
+            ORDER BY currency_code
+            """
+        ).fetchall()
+    finally:
+        connection.close()
+
+    currencies = []
+    for row in rows:
+        currency = dict(row)
+        currency["can_hold"] = bool(currency["can_hold"])
+        currency["can_exchange"] = bool(currency["can_exchange"])
+        currencies.append(currency)
+    return currencies
+
+
+def get_exchange_rate(
+    base_currency: str,
+    quote_currency: str,
+    database_path: str | Path = DEFAULT_DATABASE_PATH,
+) -> dict[str, object] | None:
+    """Return the latest currently effective synthetic exchange rate."""
+    base_code = _normalize_currency_code(base_currency, "base_currency")
+    quote_code = _normalize_currency_code(quote_currency, "quote_currency")
+    if base_code == quote_code:
+        raise ValueError("base_currency and quote_currency must be different")
+
+    now = _utc_now()
+    connection = connect_database(database_path)
+    try:
+        row = connection.execute(
+            """
+            SELECT
+                exchange_rates.base_currency,
+                exchange_rates.quote_currency,
+                exchange_rates.rate,
+                exchange_rates.effective_at,
+                exchange_rates.expires_at
+            FROM exchange_rates
+            JOIN supported_currencies AS base
+                ON base.currency_code = exchange_rates.base_currency
+            JOIN supported_currencies AS quote
+                ON quote.currency_code = exchange_rates.quote_currency
+            WHERE exchange_rates.base_currency = ?
+              AND exchange_rates.quote_currency = ?
+              AND exchange_rates.effective_at <= ?
+              AND (
+                  exchange_rates.expires_at IS NULL
+                  OR exchange_rates.expires_at > ?
+              )
+              AND base.enabled = 1
+              AND quote.enabled = 1
+              AND base.can_exchange = 1
+              AND quote.can_exchange = 1
+            ORDER BY exchange_rates.effective_at DESC
+            LIMIT 1
+            """,
+            (base_code, quote_code, now, now),
+        ).fetchone()
+    finally:
+        connection.close()
+
+    return dict(row) if row is not None else None
+
+
+def request_profile_update(
+    customer_id: str,
+    field_name: str,
+    new_value: str,
+    database_path: str | Path = DEFAULT_DATABASE_PATH,
+) -> dict[str, object] | None:
+    """Create a reviewable request to change an allowed customer field."""
+    _validate_identifier(customer_id, "customer_id")
+    _validate_identifier(field_name, "field_name")
+    _validate_identifier(new_value, "new_value")
+
+    allowed_fields = {
+        "full_name",
+        "email",
+        "country",
+        "phone_number",
+        "preferred_language",
+    }
+    normalized_field = field_name.strip().lower()
+    if normalized_field not in allowed_fields:
+        raise ValueError(
+            "field_name must be one of: " + ", ".join(sorted(allowed_fields))
+        )
+
+    cleaned_value = new_value.strip()
+    connection = connect_database(database_path, read_only=False)
+    try:
+        with connection:
+            customer = connection.execute(
+                f"SELECT {normalized_field} FROM customers WHERE customer_id = ?",
+                (customer_id,),
+            ).fetchone()
+            if customer is None:
+                return None
+
+            old_value = customer[normalized_field]
+            if old_value == cleaned_value:
+                raise ValueError(f"{normalized_field} already has this value")
+
+            if normalized_field == "email":
+                email_owner = connection.execute(
+                    """
+                    SELECT customer_id
+                    FROM customers
+                    WHERE lower(email) = lower(?) AND customer_id != ?
+                    """,
+                    (cleaned_value, customer_id),
+                ).fetchone()
+                if email_owner is not None:
+                    raise ValueError("That email address is already in use")
+
+            active_request = connection.execute(
+                """
+                SELECT profile_update_id
+                FROM customer_profile_updates
+                WHERE customer_id = ?
+                  AND field_name = ?
+                  AND status = 'requested'
+                LIMIT 1
+                """,
+                (customer_id, normalized_field),
+            ).fetchone()
+            if active_request is not None:
+                raise ValueError(
+                    f"A {normalized_field} update request is already pending"
+                )
+
+            profile_update_id = _new_identifier("pru")
+            requested_at = _utc_now()
+            connection.execute(
+                """
+                INSERT INTO customer_profile_updates (
+                    profile_update_id,
+                    customer_id,
+                    field_name,
+                    old_value,
+                    new_value,
+                    status,
+                    requested_at,
+                    completed_at
+                ) VALUES (?, ?, ?, ?, ?, 'requested', ?, NULL)
+                """,
+                (
+                    profile_update_id,
+                    customer_id,
+                    normalized_field,
+                    old_value,
+                    cleaned_value,
+                    requested_at,
+                ),
+            )
+
+            return {
+                "profile_update_id": profile_update_id,
+                "field_name": normalized_field,
+                "old_value": old_value,
+                "new_value": cleaned_value,
+                "status": "requested",
+                "requested_at": requested_at,
+            }
+    finally:
+        connection.close()
+
+
+def request_account_closure(
+    customer_id: str,
+    account_id: str,
+    reason: str | None = None,
+    database_path: str | Path = DEFAULT_DATABASE_PATH,
+) -> dict[str, object] | None:
+    """Create a closure request for a customer-owned account."""
+    _validate_identifier(customer_id, "customer_id")
+    _validate_identifier(account_id, "account_id")
+    if reason is not None:
+        _validate_identifier(reason, "reason")
+
+    cleaned_reason = reason.strip() if reason is not None else None
+    connection = connect_database(database_path, read_only=False)
+    try:
+        with connection:
+            account = connection.execute(
+                """
+                SELECT account_id, status
+                FROM accounts
+                WHERE customer_id = ? AND account_id = ?
+                """,
+                (customer_id, account_id),
+            ).fetchone()
+            if account is None:
+                return None
+            if account["status"] == "closed":
+                raise ValueError("The account is already closed")
+
+            active_request = connection.execute(
+                """
+                SELECT closure_request_id, status, requested_at
+                FROM account_closure_requests
+                WHERE account_id = ?
+                  AND status IN ('requested', 'under_review')
+                ORDER BY requested_at DESC
+                LIMIT 1
+                """,
+                (account_id,),
+            ).fetchone()
+            if active_request is not None:
+                return {
+                    "closure_request_id": active_request["closure_request_id"],
+                    "account_id": account_id,
+                    "status": active_request["status"],
+                    "requested_at": active_request["requested_at"],
+                    "changed": False,
+                }
+
+            closure_request_id = _new_identifier("acr")
+            requested_at = _utc_now()
+            connection.execute(
+                """
+                INSERT INTO account_closure_requests (
+                    closure_request_id,
+                    account_id,
+                    reason,
+                    status,
+                    requested_at,
+                    resolved_at
+                ) VALUES (?, ?, ?, 'requested', ?, NULL)
+                """,
+                (
+                    closure_request_id,
+                    account_id,
+                    cleaned_reason,
+                    requested_at,
+                ),
+            )
+
+            return {
+                "closure_request_id": closure_request_id,
+                "account_id": account_id,
+                "reason": cleaned_reason,
+                "status": "requested",
+                "requested_at": requested_at,
+                "changed": True,
+            }
+    finally:
+        connection.close()
 
 
 def get_card_status(
@@ -774,6 +1134,15 @@ def block_card(
         connection.close()
 
 
+def _account_row_to_dict(row: sqlite3.Row) -> dict[str, object]:
+    account = dict(row)
+    last_four = account.pop("account_number_last_four")
+    account["masked_account_number"] = (
+        f"**** {last_four}" if last_four is not None else None
+    )
+    return account
+
+
 def _card_row_to_dict(row: sqlite3.Row) -> dict[str, object]:
     card = dict(row)
     card["contactless_enabled"] = bool(card["contactless_enabled"])
@@ -834,6 +1203,14 @@ def _validate_positive_amount(amount: int) -> None:
         raise TypeError("amount_minor_units must be an integer")
     if amount <= 0:
         raise ValueError("amount_minor_units must be greater than zero")
+
+
+def _normalize_currency_code(value: str, field_name: str) -> str:
+    _validate_identifier(value, field_name)
+    currency_code = value.strip().upper()
+    if len(currency_code) != 3 or not currency_code.isalpha():
+        raise ValueError(f"{field_name} must be a three-letter currency code")
+    return currency_code
 
 
 def _new_identifier(prefix: str) -> str:

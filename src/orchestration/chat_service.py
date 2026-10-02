@@ -8,6 +8,7 @@ from src.llm.model_factory import create_chat_model
 from src.tools.card_tools import create_card_tools
 from src.tools.payment_tools import create_payment_tools
 from src.tools.transfer_tools import create_transfer_tools
+from src.tools.account_tools import create_account_tools
 
 
 class ChatService():
@@ -20,11 +21,13 @@ class ChatService():
         card_tools = create_card_tools(customer_id=self.customer_id)
         payment_tools = create_payment_tools(customer_id=self.customer_id)
         transfer_tools = create_transfer_tools(customer_id=self.customer_id)
+        account_tools = create_account_tools(customer_id=self.customer_id)
 
         tools_by_route = {
             "card_services": card_tools,
             "payments_and_disputes": payment_tools,
-            "transfers_and_topups": transfer_tools
+            "transfers_and_topups": transfer_tools,
+            "account_currency_and_access": account_tools
         }
         
         self.agents = create_agents(model=self.model,
@@ -46,7 +49,7 @@ class ChatService():
 if __name__ == "__main__":
     chat_service = ChatService(customer_id="cus_001")
 
-    message = "What is the is the status of transfer trf_001."
+    message = "What is the currencies available for my account"
 
     print(chat_service.router.predict(message=message))
 
