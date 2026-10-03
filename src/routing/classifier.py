@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pathlib import Path
 
 import torch
@@ -11,6 +12,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CHECKPOINT_PATH = (
     PROJECT_ROOT / "models" / "checkpoints" / "best_model_oos.pt"
 )
+
+
+@dataclass(frozen=True)
+class RoutingPrediction:
+    route: str
+    confidence: float
 
 
 class ClassifierRouter:
@@ -64,6 +71,9 @@ class ClassifierRouter:
         self.model.eval()
 
     def predict(self, message: str) -> str:
+        return self.predict_with_confidence(message).route
+
+    def predict_with_confidence(self, message: str) -> RoutingPrediction:
         if not isinstance(message, str):
             raise TypeError("message must be a string")
         if not message.strip():
@@ -85,14 +95,21 @@ class ClassifierRouter:
 
         with torch.inference_mode():
             logits = self.model(inputs, lengths)
-            route_id = logits.argmax(dim=1).item()
+            probabilities = torch.softmax(logits, dim=1)
+            confidence, route_id = probabilities.max(dim=1)
+            route_id = route_id.item()
 
         try:
-            return self.id_to_route[route_id]
+            route = self.id_to_route[route_id]
         except KeyError as error:
             raise ValueError(
                 f"Model predicted unknown route ID: {route_id}"
             ) from error
+
+        return RoutingPrediction(
+            route=route,
+            confidence=confidence.item(),
+        )
 
 
 if __name__ == "__main__":

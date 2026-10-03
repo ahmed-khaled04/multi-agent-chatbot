@@ -1,6 +1,10 @@
 from langchain.agents import create_agent
 
 from src.agents.prompts import SYSTEM_PROMPTS
+from src.rag.context import (
+    KnowledgeContext,
+    create_knowledge_context_middleware,
+)
 
 def create_agents(
         model,
@@ -18,5 +22,9 @@ def create_agents(
 
         agents[route] = create_agent(model=model,
                                      tools=route_tools,
-                                     system_prompt=system_prompt)
+                                     system_prompt=system_prompt,
+                                     middleware=[
+                                         create_knowledge_context_middleware()
+                                     ],
+                                     context_schema=KnowledgeContext)
     return agents

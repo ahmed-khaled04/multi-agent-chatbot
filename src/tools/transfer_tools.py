@@ -4,12 +4,18 @@ from src.bank.database import (
     cancel_transfer,
     get_topup_status,
     get_transfer_status,
+    list_customer_beneficiaries,
     list_recent_topups,
     list_recent_transfers,
 )
 
 
 def create_transfer_tools(customer_id: str):
+    @tool
+    def list_my_beneficiaries() -> list[dict[str, object]]:
+        """List the customer's transfer beneficiaries with masked details."""
+        return list_customer_beneficiaries(customer_id=customer_id)
+
     @tool
     def list_my_transfers(limit: int = 10) -> list[dict[str, object]]:
         """List the customer's recent incoming and outgoing transfers.
@@ -96,6 +102,7 @@ def create_transfer_tools(customer_id: str):
         }
 
     return [
+        list_my_beneficiaries,
         list_my_transfers,
         get_my_transfer_status,
         cancel_my_transfer,

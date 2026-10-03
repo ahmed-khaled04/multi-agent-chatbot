@@ -6,3 +6,4 @@ __pycache__/
 .env
 runs/
 models/checkpoints/
+data/vector_store/
